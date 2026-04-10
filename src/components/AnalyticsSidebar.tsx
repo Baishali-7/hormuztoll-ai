@@ -225,6 +225,7 @@ interface Props {
   showChokepoint: boolean;
   onCloseChokepoint: () => void;
   connected: boolean;
+  usingDemoData?: boolean;
 }
 
 const TYPE_DOT: Record<string, string> = {
@@ -261,6 +262,7 @@ function SidebarContent({
   onCloseChokepoint,
   connected,
   onClose,
+  usingDemoData,
   isMobile = false,
 }: Props & { onClose?: () => void; isMobile?: boolean }) {
   const tankers = allShips.filter((s) => s.type === "tanker").length;
@@ -307,7 +309,40 @@ function SidebarContent({
           )}
         </div>
       </div>
+      {/* ADD THIS: Demo Mode Indicator */}
+      {usingDemoData && (
+        <div className="mx-4 mt-3 p-2.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-lg border border-blue-500/20">
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-blue-400 font-medium">DEMO MODE ACTIVE</span>
+            <span className="text-gray-400">•</span>
+            <span className="text-gray-400 text-[10px]">
+              Ships moving in real-time
+            </span>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1.5">
+            ⚡ Live AIS connection unavailable. Showing simulated vessel
+            movements.
+          </p>
+        </div>
+      )}
 
+      {/* ADD THIS: Connection Issue Warning (when not connected and not in demo mode) */}
+      {!connected && !usingDemoData && (
+        <div className="mx-4 mt-3 p-2.5 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+            <span className="text-yellow-400 font-medium">RECONNECTING</span>
+            <span className="text-gray-400">•</span>
+            <span className="text-gray-400 text-[10px]">
+              Attempting to restore connection
+            </span>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1.5">
+            Will automatically switch to demo mode if connection fails.
+          </p>
+        </div>
+      )}
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* Stats Grid */}

@@ -205,7 +205,7 @@ export default function AIChatbot() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-[1000] w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
+          className="fixed bottom-15 right-6 z-[1000] w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
         >
           <MessageSquare className="w-5 h-5" />
         </button>

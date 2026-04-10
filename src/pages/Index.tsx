@@ -37,10 +37,33 @@ const WifiOff = ({ className = "" }) => (
   </svg>
 );
 
+const ShipIcon = ({ className = "" }) => (
+  <svg
+    className={className}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M13 5l4 4-4 4M5 5l4 4-4 4"
+    />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M3 21h18M5 21V7a2 2 0 012-2h10a2 2 0 012 2v14"
+    />
+  </svg>
+);
+
 export default function Index() {
   // ── Live data from AISStream ─────────────────────────────────────────────
   const apiKey = import.meta.env.VITE_AISSTREAM_API_KEY ?? "";
-  const { ships, connected, error, shipCount } = useAISStream(apiKey);
+  const { ships, connected, error, shipCount, usingDemoData } =
+    useAISStream(apiKey);
 
   // ── Local UI state ───────────────────────────────────────────────────────
   const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
@@ -126,18 +149,25 @@ export default function Index() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Connection status */}
-          {connected ? (
-            <span className="flex items-center gap-1.5 text-[10px] text-green-600 dark:text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              LIVE · {shipCount} vessels
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-[10px] text-yellow-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-              {error ?? "Connecting…"}
-            </span>
-          )}
+          {/* Connection status with demo mode indicator */}
+          <div className="flex items-center gap-2">
+            {connected ? (
+              <span className="flex items-center gap-1.5 text-[10px] text-green-600 dark:text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                LIVE · {shipCount} vessels
+              </span>
+            ) : usingDemoData ? (
+              <span className="flex items-center gap-1.5 text-[10px] text-blue-400">
+                <ShipIcon className="w-3 h-3 animate-pulse" />
+                DEMO MODE · {shipCount} moving vessels
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-[10px] text-yellow-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                {error ?? "Connecting…"}
+              </span>
+            )}
+          </div>
 
           <span className="text-[10px] text-gray-600 dark:text-gray-400 hidden sm:block">
             {new Date().toUTCString().slice(0, -4)} UTC
@@ -177,17 +207,59 @@ export default function Index() {
             </div>
           </div>
 
-          {/* Waiting for first data */}
-          {connected && shipCount === 0 && (
+          {/* Demo mode info banner */}
+          {usingDemoData && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500/90 dark:bg-blue-600/90 backdrop-blur-sm rounded-full px-4 py-1.5 z-[500] shadow-lg animate-pulse">
+              <div className="flex items-center gap-2 text-white text-xs font-medium">
+                <ShipIcon className="w-3 h-3" />
+                <span>DEMO MODE ACTIVE</span>
+                <span className="w-1 h-1 rounded-full bg-white/50" />
+                <span>Ships are moving</span>
+              </div>
+            </div>
+          )}
+
+          {/* Waiting for first data / Demo loading */}
+          {shipCount === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[400]">
               <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm border border-gray-200 dark:border-gray-700 rounded-xl px-6 py-4 text-center shadow-lg">
-                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">
-                  Receiving live AIS data…
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1">
-                  Ships will appear as signals arrive
-                </p>
+                {usingDemoData ? (
+                  <>
+                    <ShipIcon className="w-6 h-6 text-blue-500 mx-auto mb-2 animate-bounce" />
+                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      Initializing demo ships…
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Generating realistic vessel movements
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      Receiving live AIS data…
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Ships will appear as signals arrive
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Connection issue notification */}
+          {!connected && !usingDemoData && error && (
+            <div className="absolute bottom-20 left-4 bg-yellow-500/90 dark:bg-yellow-600/90 backdrop-blur-sm rounded-lg px-3 py-2 z-[500] shadow-lg max-w-xs">
+              <div className="flex items-start gap-2 text-white text-xs">
+                <WifiOff className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Connection Issue</p>
+                  <p className="text-white/80 text-[10px]">{error}</p>
+                  <p className="text-white/60 text-[9px] mt-1">
+                    Will auto-reconnect when available
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -212,6 +284,7 @@ export default function Index() {
           showChokepoint={showChokepoint}
           onCloseChokepoint={() => setShowChokepoint(false)}
           connected={connected}
+          usingDemoData={usingDemoData}
         />
       </div>
 

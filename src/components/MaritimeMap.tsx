@@ -239,37 +239,39 @@ export default function MaritimeMap({
         >
           <Popup>
             <div className="text-gray-900 rounded-lg min-w-[200px] space-y-1.5">
-              <p className="font-bold text-sm border-b border-gray-200 pb-1 mb-1 flex items-center gap-1.5">
+              <p className="font-bold text-sm border-b border-gray-200 pb-1 mb-1 flex items-center gap-1.5 text-gray-500">
                 {statusDot(ship.status)}
                 {ship.name}
               </p>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                 <span className="text-gray-500">MMSI</span>
-                <span className="font-mono">{ship.mmsi}</span>
+                <span className="font-mono text-gray-500">{ship.mmsi}</span>
 
                 <span className="text-gray-500">Type</span>
-                <span className="capitalize font-medium">{ship.type}</span>
+                <span className="capitalize font-medium text-gray-500">
+                  {ship.type}
+                </span>
 
                 <span className="text-gray-500">Speed</span>
-                <span>{ship.speed} kn</span>
+                <span className="text-gray-500">{ship.speed} kn</span>
 
                 <span className="text-gray-500">Heading</span>
-                <span>{ship.heading}°</span>
+                <span className="text-gray-500">{ship.heading}°</span>
 
                 <span className="text-gray-500">Status</span>
-                <span className="capitalize">{ship.status}</span>
+                <span className="capitalize text-gray-500">{ship.status}</span>
 
                 <span className="text-gray-500">Route</span>
-                <span>{ship.route}</span>
+                <span className="text-gray-500">{ship.route}</span>
 
                 <span className="text-gray-500">Destination</span>
-                <span>{ship.destination}</span>
+                <span className="text-gray-500">{ship.destination}</span>
 
                 <span className="text-gray-500">Flag / CS</span>
-                <span>{ship.flag}</span>
+                <span className="text-gray-500">{ship.flag}</span>
 
                 <span className="text-gray-500">Position</span>
-                <span>
+                <span className="text-gray-500">
                   {ship.lat.toFixed(4)}°N {ship.lng.toFixed(4)}°E
                 </span>
               </div>

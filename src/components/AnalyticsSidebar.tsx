@@ -206,6 +206,135 @@ const List = ({ className = "" }) => (
   </svg>
 );
 
+// ── Toll Data ─────────────────────────────────────────────────────────────────
+const TOLL_DATA: Record<
+  string,
+  {
+    base: number;
+    geo: number;
+    anxiety: number;
+    congestion: number;
+    sanction: number;
+    discount: number;
+    discountLabel: string;
+    note: string;
+    modalMsg: string;
+  }
+> = {
+  us: {
+    base: 4200,
+    geo: 3100,
+    anxiety: 800,
+    congestion: 450,
+    sanction: 0,
+    discount: 0,
+    discountLabel: "",
+    note: "Carrier group escort fee not included. CENTCOM billed separately.",
+    modalMsg:
+      "Your toll has been received. Please await diplomatic incident within 48 hours.",
+  },
+  uk: {
+    base: 3800,
+    geo: 2900,
+    anxiety: 750,
+    congestion: 450,
+    sanction: 0,
+    discount: 200,
+    discountLabel: "Special relationship discount",
+    note: "HMS equivalent not accepted as collateral.",
+    modalMsg: "Payment received. A strongly-worded letter will follow.",
+  },
+  ir: {
+    base: 0,
+    geo: 0,
+    anxiety: 0,
+    congestion: 0,
+    sanction: 0,
+    discount: 4200,
+    discountLabel: "Sovereign operator waiver",
+    note: "Iranian-flagged vessels transit free. You own this strait. Technically.",
+    modalMsg: "It's your strait! No charge. Drive safely.",
+  },
+  cn: {
+    base: 3200,
+    geo: 1200,
+    anxiety: 400,
+    congestion: 450,
+    sanction: 0,
+    discount: 800,
+    discountLabel: "BRI friendship credit",
+    note: "Payment in yuan accepted. Digital yuan preferred.",
+    modalMsg:
+      "Payment acknowledged. Your social credit score has been updated.",
+  },
+  ru: {
+    base: 3500,
+    geo: 2100,
+    anxiety: 600,
+    congestion: 450,
+    sanction: 5500,
+    discount: 0,
+    discountLabel: "",
+    note: "SWIFT payment unavailable. Crypto or barter only.",
+    modalMsg: "Payment noted. Please do not mention this to anyone.",
+  },
+  sa: {
+    base: 2800,
+    geo: 1800,
+    anxiety: 350,
+    congestion: 450,
+    sanction: 0,
+    discount: 600,
+    discountLabel: "OPEC solidarity rate",
+    note: "Outbound oil tankers receive a complimentary smile.",
+    modalMsg: "Shukran! Your oil will arrive shortly.",
+  },
+  ae: {
+    base: 2600,
+    geo: 1500,
+    anxiety: 300,
+    congestion: 450,
+    sanction: 0,
+    discount: 700,
+    discountLabel: "Regional neighbour rate",
+    note: "Dubai port rebate applicable. Ask about our loyalty card.",
+    modalMsg: "Payment complete. Enjoy duty-free on your way through.",
+  },
+  in: {
+    base: 3000,
+    geo: 1600,
+    anxiety: 450,
+    congestion: 450,
+    sanction: 200,
+    discount: 300,
+    discountLabel: "Non-aligned movement legacy rate",
+    note: "Strategic ambiguity discount applied automatically.",
+    modalMsg: "Payment processed. India abstains from commenting.",
+  },
+  jp: {
+    base: 3400,
+    geo: 2200,
+    anxiety: 700,
+    congestion: 450,
+    sanction: 0,
+    discount: 0,
+    discountLabel: "",
+    note: "90% of Japan's oil transits here. No pressure whatsoever.",
+    modalMsg: "Payment complete. Energy security anxiety sold separately.",
+  },
+  de: {
+    base: 3100,
+    geo: 2000,
+    anxiety: 500,
+    congestion: 450,
+    sanction: 0,
+    discount: 100,
+    discountLabel: "EU multilateralism credit",
+    note: "Commission approval required for vessels over 50,000 DWT.",
+    modalMsg: "Zahlung erhalten. A committee will review this in Q3.",
+  },
+};
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Props {
   allShips: Ship[];
@@ -265,6 +394,22 @@ function SidebarContent({
   usingDemoData,
   isMobile = false,
 }: Props & { onClose?: () => void; isMobile?: boolean }) {
+  // ── Toll Calculator State ────────────────────────────────────────────────
+  const [tollNationality, setTollNationality] = useState("");
+  const [showTollModal, setShowTollModal] = useState(false);
+  const tollData = TOLL_DATA[tollNationality] ?? null;
+  const tollTotal = tollData
+    ? Math.max(
+        0,
+        tollData.base +
+          tollData.geo +
+          tollData.anxiety +
+          tollData.congestion +
+          tollData.sanction -
+          tollData.discount
+      )
+    : 0;
+
   const tankers = allShips.filter((s) => s.type === "tanker").length;
   const cargo = allShips.filter((s) => s.type === "cargo").length;
   const containers = allShips.filter((s) => s.type === "container").length;
@@ -283,6 +428,51 @@ function SidebarContent({
 
   return (
     <>
+      {/* ── Apple Pay Modal (portal-style, fixed overlay) ──────────────── */}
+      {showTollModal && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center"
+          onClick={() => setShowTollModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-xs w-[90%] text-center shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
+              <svg
+                className="w-7 h-7 text-green-600 dark:text-green-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              Payment Initiated
+            </h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed mb-4">
+              {tollData?.modalMsg}
+            </p>
+            <div className="text-xs text-gray-400 dark:text-gray-500 mb-4 font-mono">
+              Transaction ID: HRM-
+              {Math.floor(Math.random() * 9000000 + 1000000)}
+            </div>
+            <button
+              onClick={() => setShowTollModal(false)}
+              className="w-full text-xs py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between flex-shrink-0">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-wide uppercase flex items-center gap-2">
@@ -309,7 +499,8 @@ function SidebarContent({
           )}
         </div>
       </div>
-      {/* ADD THIS: Demo Mode Indicator */}
+
+      {/* Demo Mode Indicator */}
       {usingDemoData && (
         <div className="mx-4 mt-3 p-2.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-lg border border-blue-500/20">
           <div className="flex items-center gap-2 text-xs">
@@ -327,7 +518,7 @@ function SidebarContent({
         </div>
       )}
 
-      {/* ADD THIS: Connection Issue Warning (when not connected and not in demo mode) */}
+      {/* Connection Issue Warning */}
       {!connected && !usingDemoData && (
         <div className="mx-4 mt-3 p-2.5 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
           <div className="flex items-center gap-2 text-xs">
@@ -343,6 +534,7 @@ function SidebarContent({
           </p>
         </div>
       )}
+
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* Stats Grid */}
@@ -413,6 +605,131 @@ function SidebarContent({
             </div>
           )}
         </div>
+
+        {/* ── Toll Calculator ─────────────────────────────────────────────── */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider flex items-center gap-1.5">
+            <span>💰</span> Strait Transit Toll Calculator
+          </p>
+          <p className="text-[10px] text-gray-500 dark:text-gray-500 mb-3 italic">
+            Select your vessel's flag state to calculate applicable levies &amp;
+            processing fees.
+          </p>
+
+          <select
+            value={tollNationality}
+            onChange={(e) => setTollNationality(e.target.value)}
+            className={selectClass}
+          >
+            <option value="">— Select flag state —</option>
+            <option value="us">🇺🇸 United States</option>
+            <option value="uk">🇬🇧 United Kingdom</option>
+            <option value="ir">🇮🇷 Iran</option>
+            <option value="cn">🇨🇳 China</option>
+            <option value="ru">🇷🇺 Russia</option>
+            <option value="sa">🇸🇦 Saudi Arabia</option>
+            <option value="ae">🇦🇪 UAE</option>
+            <option value="in">🇮🇳 India</option>
+            <option value="jp">🇯🇵 Japan</option>
+            <option value="de">🇩🇪 Germany</option>
+          </select>
+
+          {tollData && (
+            <div className="space-y-2 mt-2">
+              {/* Breakdown card */}
+              <div className="bg-gray-50 dark:bg-gray-800/40 rounded-lg p-3 border border-gray-200 dark:border-gray-700/50 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Base transit fee
+                  </span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    ${tollData.base.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Geopolitical tension surcharge
+                  </span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    ${tollData.geo.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Existential anxiety levy
+                  </span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    ${tollData.anxiety.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Chokepoint congestion tax
+                  </span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    ${tollData.congestion.toLocaleString()}
+                  </span>
+                </div>
+                {tollData.sanction > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">
+                      Sanctions complexity fee
+                    </span>
+                    <span className="font-medium text-yellow-600 dark:text-yellow-400">
+                      ${tollData.sanction.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {tollData.discount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {tollData.discountLabel}
+                    </span>
+                    <span className="font-medium text-green-600 dark:text-green-400">
+                      -${tollData.discount.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-1.5 flex justify-between items-baseline">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    Total due
+                  </span>
+                  <span className="font-bold text-base text-gray-900 dark:text-gray-100">
+                    ${tollTotal.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Flavour note */}
+              <p className="text-[10px] text-gray-500 dark:text-gray-500 italic leading-relaxed">
+                {tollData.note}
+              </p>
+
+              {/* Apple Pay Button */}
+              <button
+                onClick={() => setShowTollModal(true)}
+                className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-medium py-2.5 rounded-xl flex items-center justify-center gap-1.5 hover:opacity-85 active:scale-[0.98] transition-all"
+              >
+                {/* Apple logo unicode */}
+                <span
+                  style={{
+                    fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
+                    fontSize: "16px",
+                    lineHeight: 1,
+                  }}
+                >
+                  &#63743;
+                </span>
+                Pay with Apple Pay
+              </button>
+              <p className="text-[9px] text-gray-400 dark:text-gray-600 text-center">
+                256-bit encrypted · Visa, Mastercard &amp; gold doubloons
+                accepted
+              </p>
+            </div>
+          )}
+        </div>
+        {/* ── End Toll Calculator ─────────────────────────────────────────── */}
 
         {/* Chokepoint Alert Panel */}
         {showChokepoint && (
@@ -493,7 +810,6 @@ function SidebarContent({
             />
           </div>
 
-          {/* Type filter — wraps naturally on small screens */}
           <div className="flex gap-1.5 flex-wrap">
             {["all", "tanker", "cargo", "container", "unknown"].map((t) => (
               <button
@@ -594,15 +910,21 @@ function SidebarContent({
               </button>
             ))
           )}
-          {/* Bottom padding so last item clears the mobile FAB */}
           <div className="h-4 md:h-0" />
         </div>
       </div>
 
-      {/* Footer — desktop only */}
-      <div className="hidden md:block p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+      {/* ── Footer with Disclaimer ───────────────────────────────────────── */}
+      <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 space-y-2">
         <p className="text-[10px] text-blue-600 dark:text-blue-400 animate-pulse">
           ● Live AIS feed · Strait of Hormuz · {allShips.length} vessels tracked
+        </p>
+        <p className="text-[9px] text-gray-400 dark:text-gray-600 leading-relaxed">
+          ⚠️ <span className="font-medium">DISCLAIMER:</span> This website is
+          solely for comedic and satirical purposes and does not intend to
+          depict any persons, places, or events, living or dead, with any and
+          all similarities disclaimed. It is not to be understood as historical
+          or factual in any regard.
         </p>
       </div>
     </>
@@ -614,7 +936,6 @@ export default function AnalyticsSidebar(props: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  // Close sheet when tapping the backdrop
   const handleBackdropClick = useCallback(() => setMobileOpen(false), []);
 
   return (
@@ -626,15 +947,12 @@ export default function AnalyticsSidebar(props: Props) {
 
       {/* ── Mobile: floating action bar ────────────────────────────────── */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-[1000] pointer-events-none">
-        {/* Backdrop */}
         {mobileOpen && (
           <div
             className="fixed inset-0 bg-black/30 pointer-events-auto"
             onClick={handleBackdropClick}
           />
         )}
-
-        {/* Bottom sheet */}
         <div
           ref={sheetRef}
           className={`pointer-events-auto relative bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 ease-out ${
@@ -650,7 +968,7 @@ export default function AnalyticsSidebar(props: Props) {
           )}
         </div>
 
-        {/* FAB strip — always visible */}
+        {/* FAB strip */}
         <div className="pointer-events-auto bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span

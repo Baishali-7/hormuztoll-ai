@@ -472,7 +472,19 @@ function SidebarContent({
           </div>
         </div>
       )}
-
+      {/* ── Footer with Disclaimer ───────────────────────────────────────── */}
+      <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 space-y-2">
+        <p className="text-[10px] text-blue-600 dark:text-blue-400 animate-pulse">
+          ● Live AIS feed · Strait of Hormuz · {allShips.length} vessels tracked
+        </p>
+        <p className="text-[9px] text-gray-400 dark:text-gray-600 leading-relaxed">
+          ⚠️ <span className="font-medium">DISCLAIMER:</span> This website is
+          solely for comedic and satirical purposes and does not intend to
+          depict any persons, places, or events, living or dead, with any and
+          all similarities disclaimed. It is not to be understood as historical
+          or factual in any regard.
+        </p>
+      </div>
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between flex-shrink-0">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-wide uppercase flex items-center gap-2">
@@ -912,20 +924,6 @@ function SidebarContent({
           )}
           <div className="h-4 md:h-0" />
         </div>
-      </div>
-
-      {/* ── Footer with Disclaimer ───────────────────────────────────────── */}
-      <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 space-y-2">
-        <p className="text-[10px] text-blue-600 dark:text-blue-400 animate-pulse">
-          ● Live AIS feed · Strait of Hormuz · {allShips.length} vessels tracked
-        </p>
-        <p className="text-[9px] text-gray-400 dark:text-gray-600 leading-relaxed">
-          ⚠️ <span className="font-medium">DISCLAIMER:</span> This website is
-          solely for comedic and satirical purposes and does not intend to
-          depict any persons, places, or events, living or dead, with any and
-          all similarities disclaimed. It is not to be understood as historical
-          or factual in any regard.
-        </p>
       </div>
     </>
   );

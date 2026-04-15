@@ -16,17 +16,8 @@ const AppInner = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route
-          path="/"
-          element={
-            <Index
-              ships={ships}
-              connected={connected}
-              error={error}
-              usingDemoData={usingDemoData}
-            />
-          }
-        />
+        <Route path="/" element={<Index />} />
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

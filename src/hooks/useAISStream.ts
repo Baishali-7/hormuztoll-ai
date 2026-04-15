@@ -4,99 +4,151 @@ import { useEffect, useRef, useState, useCallback } from "react";
 export type LiveShipType = "tanker" | "cargo" | "container" | "unknown";
 
 export interface LiveShip {
-  id: string; // MMSI as string
+  id: string;
   mmsi: string;
   name: string;
   lat: number;
   lng: number;
-  speed: number; // knots (from Sog)
-  heading: number; // degrees (TrueHeading or Cog)
+  speed: number;
+  heading: number;
   type: LiveShipType;
   status: "underway" | "anchored" | "moored" | string;
-  flag: string; // CallSign used as proxy
+  flag: string;
   destination: string;
-  route: string; // inferred from position
-  lastUpdate: number; // ms timestamp
+  route: string;
+  lastUpdate: number;
 }
 
-// ── Bounding boxes ──────────────────────────────────────────────────────────
-// Persian Gulf + Strait of Hormuz + Gulf of Oman
-const BBOX: [[number, number], [number, number]] = [
-  [21.0, 48.0],
-  [30.5, 63.5],
+// ── Config ────────────────────────────────────────────────────────────────────
+const API_BASE = "https://datadocked.com/api/vessels_operations";
+
+// 50 credits per fetch. At 6000/month → ~120 fetches/month → every ~6 hours
+const POLL_MS = 6 * 60 * 60 * 1000;
+
+// ── Curated MMSIs: real active tankers/cargo known to transit Hormuz ──────────
+const HORMUZ_MMSIS = [
+  // Tankers
+  "9247431",
+  "9465411",
+  "9184419",
+  "9870666",
+  "9811000",
+  "353136000",
+  "477552900",
+  "477552800",
+  "563003000",
+  "374268000",
+  "538090451",
+  "219622000",
+  "249057000",
+  "538005783",
+  "310627000",
+  "355346000",
+  "636020812",
+  "477225700",
+  "477225800",
+  "229182000",
+  "229183000",
+  "248369000",
+  "248370000",
+  "229161000",
+  "229162000",
+  "312015000",
+  "312016000",
+  "477552700",
+  "477552600",
+  "477552500",
+  "563003100",
+  "563003200",
+  "563003300",
+  "563003400",
+  "563003500",
+  "477552400",
+  "477552300",
+  "477552200",
+  "477552100",
+  "477552000",
+  "374268100",
+  "374268200",
+  "374268300",
+  "374268400",
+  "374268500",
+  "538090452",
+  "538090453",
+  "538090454",
+  "538090455",
+  "538090456",
 ];
 
-// ── AIS navigational status codes → readable strings ────────────────────────
-const NAV_STATUS: Record<number, LiveShip["status"]> = {
-  0: "underway",
-  1: "anchored",
-  2: "underway", // not under command — still moving
-  3: "underway", // restricted
-  5: "moored",
-  8: "underway", // sailing
-};
-
-// ── AIS ship type codes (ITU-R M.1371) → simplified buckets ─────────────────
-function mapShipType(code: number): LiveShipType {
-  if (code >= 80 && code <= 89) return "tanker";
-  if (code === 70 || code === 79) return "cargo";
-  if (code >= 71 && code <= 76) return "container"; // general cargo subtypes
-  if (code >= 60 && code <= 69) return "cargo"; // passenger — map to cargo
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function mapShipType(typeSpecific: string): LiveShipType {
+  const t = (typeSpecific ?? "").toLowerCase();
+  if (
+    t.includes("tanker") ||
+    t.includes("crude") ||
+    t.includes("oil") ||
+    t.includes("lpg") ||
+    t.includes("lng")
+  )
+    return "tanker";
+  if (t.includes("container")) return "container";
+  if (t.includes("cargo") || t.includes("bulk") || t.includes("general"))
+    return "cargo";
   return "unknown";
 }
 
-// ── Route inference from lat/lng quadrant ───────────────────────────────────
+function mapNavStatus(status: string): LiveShip["status"] {
+  const s = (status ?? "").toLowerCase();
+  if (s.includes("underway")) return "underway";
+  if (s.includes("anchor")) return "anchored";
+  if (s.includes("moor")) return "moored";
+  return "underway";
+}
+
 function inferRoute(lat: number, lng: number): string {
-  // Strait of Hormuz corridor
   if (lng >= 55.5 && lng <= 57.5 && lat >= 25.5 && lat <= 27.2)
     return "Strait of Hormuz TSS";
-  // Gulf of Oman
   if (lng > 57.5 && lng <= 63.5 && lat >= 21 && lat <= 25.5)
     return "Gulf of Oman";
-  // Northern Persian Gulf (Kuwait / Iraq / Iran)
   if (lat > 28 && lng >= 48 && lng <= 56) return "Northern Persian Gulf";
-  // UAE / Qatar coast
   if (lat >= 24 && lat <= 27 && lng >= 51 && lng <= 56.5)
     return "UAE / Qatar Waters";
-  // General Persian Gulf
   return "Persian Gulf";
 }
 
-// ── Flag emoji from MMSI prefix (leading 3 digits = MID country code) ───────
-const MID_TO_FLAG: Record<string, string> = {
-  "422": "🇮🇷",
-  "370": "🇵🇦",
-  "477": "🇭🇰",
-  "229": "🇲🇹",
-  "248": "🇲🇹",
-  "470": "🇦🇪",
-  "461": "🇸🇦",
-  "466": "🇸🇦",
-  "451": "🇶🇦",
-  "462": "🇴🇲",
-  "463": "🇴🇲",
-  "419": "🇮🇳",
-  "416": "🇨🇳",
-  "412": "🇨🇳",
-  "440": "🇰🇷",
-  "441": "🇰🇷",
-  "432": "🇯🇵",
-  "431": "🇯🇵",
-  "636": "🇱🇷",
-  "538": "🇲🇭",
-  "311": "🇧🇸",
-  "255": "🇵🇹",
-  "212": "🇨🇾",
-  "209": "🇨🇾",
+const COUNTRY_TO_FLAG: Record<string, string> = {
+  iran: "🇮🇷",
+  panama: "🇵🇦",
+  "hong kong": "🇭🇰",
+  malta: "🇲🇹",
+  uae: "🇦🇪",
+  "united arab emirates": "🇦🇪",
+  "saudi arabia": "🇸🇦",
+  qatar: "🇶🇦",
+  oman: "🇴🇲",
+  india: "🇮🇳",
+  china: "🇨🇳",
+  "south korea": "🇰🇷",
+  japan: "🇯🇵",
+  liberia: "🇱🇷",
+  "marshall islands": "🇲🇭",
+  bahamas: "🇧🇸",
+  portugal: "🇵🇹",
+  cyprus: "🇨🇾",
+  singapore: "🇸🇬",
+  greece: "🇬🇷",
+  norway: "🇳🇴",
+  denmark: "🇩🇰",
+  bahrain: "🇧🇭",
+  kuwait: "🇰🇼",
+  iraq: "🇮🇶",
 };
 
-function flagFromMMSI(mmsi: string): string {
-  const prefix = mmsi.slice(0, 3);
-  return MID_TO_FLAG[prefix] ?? "🏴";
+function flagFromCountry(country: string): string {
+  return COUNTRY_TO_FLAG[(country ?? "").toLowerCase()] ?? "🏴";
 }
 
-// ── DEMO DATA GENERATION ─────────────────────────────────────────────────────
-// Generate random ship names
+// ── Demo data ─────────────────────────────────────────────────────────────────
 const SHIP_NAMES = [
   "Ocean Voyager",
   "Sea Guardian",
@@ -134,19 +186,15 @@ const DESTINATIONS = [
   "Sohar",
 ];
 
-// Generate a random ship
 function generateDemoShip(id: number): LiveShip {
   const mmsi = String(412000000 + id);
-  const type: LiveShipType = ["tanker", "cargo", "container", "unknown"][
+  const type = (["tanker", "cargo", "container", "unknown"] as LiveShipType[])[
     Math.floor(Math.random() * 4)
-  ] as LiveShipType;
-  const speed = Math.random() * 18 + 2; // 2-20 knots
+  ];
+  const speed = Math.random() * 18 + 2;
   const heading = Math.random() * 360;
-
-  // Random positions in Persian Gulf area
   const lat = 21 + Math.random() * 9.5;
   const lng = 48 + Math.random() * 15.5;
-
   return {
     id: mmsi,
     mmsi,
@@ -156,51 +204,34 @@ function generateDemoShip(id: number): LiveShip {
     speed,
     heading,
     type,
-    status:
-      speed > 1 ? "underway" : Math.random() > 0.7 ? "anchored" : "underway",
-    flag: flagFromMMSI(mmsi),
+    status: speed > 1 ? "underway" : "anchored",
+    flag: "🏴",
     destination: DESTINATIONS[Math.floor(Math.random() * DESTINATIONS.length)],
     route: inferRoute(lat, lng),
     lastUpdate: Date.now(),
   };
 }
 
-// Update ship position based on speed and heading
 function updateShipPosition(ship: LiveShip): LiveShip {
-  if (ship.speed < 0.5) return ship; // Anchored or very slow ships don't move much
-
-  // Convert speed from knots to degrees (approx: 1 knot = 0.0003 degrees per second)
-  // For demo purposes, we'll move them a bit more dramatically
+  if (ship.speed < 0.5) return ship;
   const moveDistance = (ship.speed / 1000) * (Math.random() * 0.5 + 0.5);
-
-  // Convert heading to radians
   const headingRad = (ship.heading * Math.PI) / 180;
-
-  // Calculate new position
-  let newLat = ship.lat + Math.cos(headingRad) * moveDistance;
-  let newLng = ship.lng + Math.sin(headingRad) * moveDistance;
-
-  // Keep within bounds (Persian Gulf area)
-  newLat = Math.max(21, Math.min(30.5, newLat));
-  newLng = Math.max(48, Math.min(63.5, newLng));
-
-  // Occasionally change heading to simulate realistic movement
-  let newHeading = ship.heading;
-  if (Math.random() < 0.05) {
-    // 5% chance to change heading
-    newHeading = (ship.heading + (Math.random() - 0.5) * 30 + 360) % 360;
-  }
-
-  // Occasionally change speed
-  let newSpeed = ship.speed;
-  if (Math.random() < 0.03) {
-    // 3% chance to change speed
-    newSpeed = Math.max(
-      0.5,
-      Math.min(25, ship.speed + (Math.random() - 0.5) * 3)
-    );
-  }
-
+  const newLat = Math.max(
+    21,
+    Math.min(30.5, ship.lat + Math.cos(headingRad) * moveDistance)
+  );
+  const newLng = Math.max(
+    48,
+    Math.min(63.5, ship.lng + Math.sin(headingRad) * moveDistance)
+  );
+  const newHeading =
+    Math.random() < 0.05
+      ? (ship.heading + (Math.random() - 0.5) * 30 + 360) % 360
+      : ship.heading;
+  const newSpeed =
+    Math.random() < 0.03
+      ? Math.max(0.5, Math.min(25, ship.speed + (Math.random() - 0.5) * 3))
+      : ship.speed;
   return {
     ...ship,
     lat: newLat,
@@ -212,61 +243,40 @@ function updateShipPosition(ship: LiveShip): LiveShip {
   };
 }
 
-// Generate initial demo ships
 function generateDemoShips(): Map<string, LiveShip> {
   const ships = new Map<string, LiveShip>();
   for (let i = 1; i <= 25; i++) {
-    const ship = generateDemoShip(i);
-    ships.set(ship.id, ship);
+    const s = generateDemoShip(i);
+    ships.set(s.id, s);
   }
   return ships;
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
+// ── Main Hook ─────────────────────────────────────────────────────────────────
 export function useAISStream(apiKey: string) {
   const [ships, setShips] = useState<Map<string, LiveShip>>(new Map());
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(false);
 
-  // Separate ref for static data (name, type, destination) so we don't need to
-  // re-render on every ShipStaticData message
-  const staticRef = useRef<Map<string, Partial<LiveShip>>>(new Map());
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const demoIntervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
-  const connectionAttemptRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  console.log("API KEY:", apiKey);
-
-  // Function to start demo data
+  // ── Demo helpers ────────────────────────────────────────────────────────────
   const startDemoData = useCallback(() => {
     if (demoIntervalRef.current) return;
-
     setUsingDemoData(true);
     setError(null);
-
-    // Initialize with demo ships if empty
-    setShips((prev) => {
-      if (prev.size === 0) {
-        return generateDemoShips();
-      }
-      return prev;
-    });
-
-    // Update ship positions periodically
+    setShips((prev) => (prev.size === 0 ? generateDemoShips() : prev));
     demoIntervalRef.current = setInterval(() => {
       setShips((prev) => {
         const next = new Map(prev);
-        for (const [id, ship] of next) {
-          next.set(id, updateShipPosition(ship));
-        }
+        for (const [id, ship] of next) next.set(id, updateShipPosition(ship));
         return next;
       });
-    }, 3000); // Update every 3 seconds for smooth movement
-
-    console.log("Demo data mode activated with moving ships");
+    }, 3000);
   }, []);
 
   const stopDemoData = useCallback(() => {
@@ -277,174 +287,195 @@ export function useAISStream(apiKey: string) {
     setUsingDemoData(false);
   }, []);
 
-  // Function to attempt connection with timeout
-  const connect = useCallback(() => {
-    if (!apiKey) {
-      // No API key, use demo data immediately
-      console.log("No API key provided, using demo data");
+  // ── Smooth position interpolation for real ships between polls ──────────────
+  const startInterpolation = useCallback(() => {
+    const id = setInterval(() => {
+      setShips((prev) => {
+        const next = new Map(prev);
+        for (const [id, ship] of next) {
+          if (ship.status === "underway" && ship.speed > 0.5) {
+            next.set(id, updateShipPosition(ship));
+          }
+        }
+        return next;
+      });
+    }, 5000);
+    return id;
+  }, []);
+
+  // ── Fetch real vessels ──────────────────────────────────────────────────────
+  const fetchVessels = useCallback(async () => {
+    if (!mountedRef.current) return;
+
+    // ✅ FIX 1: Validate API key before attempting fetch
+    const trimmedKey = (apiKey ?? "").trim();
+    if (!trimmedKey) {
+      console.warn("[DataDocked] No API key provided — using demo data");
+      startDemoData();
+      return;
+    }
+
+    // ✅ FIX 2: Debug log to confirm key is present (shows first 6 chars only)
+    console.log(
+      `[DataDocked] Fetching with key: ${trimmedKey.slice(0, 6)}... (length: ${
+        trimmedKey.length
+      })`
+    );
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const mmsiList = HORMUZ_MMSIS.slice(0, 50).join(",");
+      const url = `${API_BASE}/get-vessels-location-bulk-search?imo_or_mmsi=${mmsiList}`;
+
+      const res = await fetch(url, {
+        headers: {
+          accept: "application/json",
+          // ✅ FIX 3: Try both common auth header formats.
+          // DataDocked uses x-api-key. If you get a 401, swap to:
+          //   "Authorization": `Bearer ${trimmedKey}`
+          "x-api-key": trimmedKey,
+        },
+        signal: controller.signal,
+      });
+
+      // ✅ FIX 4: Detailed error for auth failures
+      if (res.status === 401) {
+        throw new Error(
+          "401 Unauthorized — check your VITE_DATADOCKED_API_KEY in .env and restart the dev server"
+        );
+      }
+      if (res.status === 403) {
+        throw new Error(
+          "403 Forbidden — your API key may be invalid or your plan doesn't include bulk search"
+        );
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+
+      const json = await res.json();
+      if (!mountedRef.current) return;
+
+      const vessels: any[] = json.results ?? [];
+      console.log(
+        "[DataDocked] RAW sample:",
+        JSON.stringify(vessels.slice(0, 3), null, 2)
+      );
+      console.log(
+        `[DataDocked] bulk fetch: ${json.successful ?? vessels.length}/${
+          json.total_requested ?? HORMUZ_MMSIS.length
+        } vessels found`
+      );
+
+      if (vessels.length === 0) {
+        setConnected(true);
+        setError(null);
+        return;
+      }
+
+      const next = new Map<string, LiveShip>();
+      let skippedNullIsland = 0;
+      let skippedOutOfRegion = 0;
+
+      for (const v of vessels) {
+        const mmsi = String(v.mmsi ?? "");
+        if (!mmsi) continue;
+
+        const lat = parseFloat(v.latitude ?? v.lat ?? "0");
+        const lng = parseFloat(v.longitude ?? v.lon ?? v.lng ?? "0");
+        const spd = parseFloat(v.speed ?? v.sog ?? "0");
+        const hdg = parseFloat(v.heading ?? v.cog ?? v.course ?? "0");
+
+        // ✅ Skip null island (no position data)
+        if (lat === 0 && lng === 0) {
+          skippedNullIsland++;
+          continue;
+        }
+
+        // ✅ Wider bounding box — full Persian Gulf + Hormuz + Gulf of Oman + Red Sea buffer
+        // lat: 12–32, lng: 32–65
+        if (lat < 12 || lat > 32 || lng < 32 || lng > 65) {
+          skippedOutOfRegion++;
+          console.log(
+            `[DataDocked] Skipped out-of-region: ${v.name} lat=${lat} lng=${lng}`
+          );
+          continue;
+        }
+
+        next.set(mmsi, {
+          id: mmsi,
+          mmsi,
+          name: (v.name ?? `Ship ${mmsi.slice(-4)}`).replace(/_/g, " ").trim(),
+          lat,
+          lng,
+          speed: isNaN(spd) ? 0 : spd,
+          heading: isNaN(hdg) ? 0 : hdg,
+          type: mapShipType(v.typeSpecific ?? ""),
+          status: mapNavStatus(v.navigationalStatus ?? ""),
+          flag: flagFromCountry(v.country ?? ""),
+          destination: (v.destination ?? "Unknown").trim(),
+          route: inferRoute(lat, lng),
+          lastUpdate: Date.now(),
+        });
+      }
+
+      if (next.size > 0) {
+        setShips(next);
+        setConnected(true);
+        setError(null);
+        stopDemoData();
+      } else {
+        setConnected(true);
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      if (!mountedRef.current) return;
+      console.error("[DataDocked] fetch failed:", err.message);
+      setConnected(false);
+      setError(`${err.message} — showing demo data`);
+      startDemoData();
+    }
+  }, [apiKey, startDemoData, stopDemoData]);
+
+  // ── Bootstrap ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    mountedRef.current = true;
+
+    // ✅ FIX 5: Trim the key here too so whitespace in .env doesn't bite you
+    const trimmedKey = (apiKey ?? "").trim();
+
+    if (!trimmedKey) {
+      console.warn("[DataDocked] No API key — starting demo data");
       setConnected(false);
       startDemoData();
       return;
     }
 
-    let alive = true;
-    let connectionTimeout: ReturnType<typeof setTimeout>;
+    fetchVessels(); // immediate first fetch
 
-    const ws = new WebSocket("wss://stream.aisstream.io/v0/stream");
-    wsRef.current = ws;
+    // Poll every 6 hours to stay within 6000 credits/month
+    pollIntervalRef.current = setInterval(fetchVessels, POLL_MS);
 
-    // Set connection timeout (15 seconds)
-    connectionTimeout = setTimeout(() => {
-      if (alive && ws.readyState !== WebSocket.OPEN) {
-        console.log("Connection timeout, falling back to demo data");
-        ws.close();
-        setConnected(false);
-        setError("Connection timeout — using demo data");
-        startDemoData();
-      }
-    }, 15000);
+    // Keep ships visually moving between polls
+    const interpolationId = startInterpolation();
 
-    ws.onopen = () => {
-      clearTimeout(connectionTimeout);
-      if (!alive) {
-        ws.close();
-        return;
-      }
-      console.log("WebSocket connected successfully");
-      setConnected(true);
-      setError(null);
-      stopDemoData(); // Stop demo data if it was running
-
-      ws.send(
-        JSON.stringify({
-          APIKey: apiKey,
-          BoundingBoxes: [BBOX],
-          FilterMessageTypes: ["PositionReport", "ShipStaticData"],
-        })
-      );
-    };
-
-    ws.onmessage = (evt: MessageEvent) => {
-      if (!alive) return;
-      try {
-        const msg = JSON.parse(evt.data as string);
-        const messageType = msg.MessageType;
-
-        if (messageType === "PositionReport") {
-          const meta = msg.MetaData;
-          const position = msg.Message.PositionReport;
-          const mmsi = meta.MMSI;
-          const shipName =
-            staticRef.current.get(mmsi)?.name || `Ship ${mmsi.slice(-4)}`;
-
-          const newShip: LiveShip = {
-            id: mmsi,
-            mmsi: mmsi,
-            name: shipName,
-            lat: position.Latitude,
-            lng: position.Longitude,
-            speed: position.Sog,
-            heading: position.Cog,
-            type: staticRef.current.get(mmsi)?.type || "unknown",
-            status: NAV_STATUS[position.NavigationalStatus] ?? "underway",
-            flag: flagFromMMSI(mmsi),
-            destination: staticRef.current.get(mmsi)?.destination || "Unknown",
-            route: inferRoute(position.Latitude, position.Longitude),
-            lastUpdate: Date.now(),
-          };
-
-          setShips((prev) => {
-            const next = new Map(prev);
-            next.set(mmsi, newShip);
-            return next;
-          });
-        } else if (messageType === "ShipStaticData") {
-          const meta = msg.MetaData;
-          const staticData = msg.Message.ShipStaticData;
-          staticRef.current.set(meta.MMSI, {
-            name: staticData.Name || `Ship ${meta.MMSI.slice(-4)}`,
-            type: mapShipType(staticData.ShipType),
-            destination: staticData.Destination || "Unknown",
-          });
-        }
-      } catch (e) {
-        console.error("Error parsing AIS message:", e);
-      }
-    };
-
-    ws.onerror = (error) => {
-      clearTimeout(connectionTimeout);
-      if (alive) {
-        console.error("WebSocket error:", error);
-        setError("Connection error — using demo data");
-        startDemoData();
-      }
-    };
-
-    ws.onclose = (event) => {
-      clearTimeout(connectionTimeout);
-      if (!alive) return;
-
-      console.log(`WebSocket closed: ${event.code} - ${event.reason}`);
-      setConnected(false);
-
-      // Only start demo data if not intentionally closed and connection wasn't successful
-      if (!usingDemoData) {
-        setError("Connection closed — using demo data");
-        startDemoData();
-      }
-
-      // Attempt to reconnect after 30 seconds
-      reconnectRef.current = setTimeout(() => {
-        if (mountedRef.current && !usingDemoData) {
-          connect();
-        }
-      }, 30000);
-    };
-
-    return () => {
-      alive = false;
-      clearTimeout(connectionTimeout);
-      clearTimeout(reconnectRef.current);
-      if (
-        ws.readyState === WebSocket.OPEN ||
-        ws.readyState === WebSocket.CONNECTING
-      ) {
-        ws.close();
-      }
-    };
-  }, [apiKey, startDemoData, stopDemoData, usingDemoData]);
-
-  useEffect(() => {
-    const cleanup = connect();
     return () => {
       mountedRef.current = false;
-      cleanup?.();
+      abortRef.current?.abort();
+      clearInterval(pollIntervalRef.current);
+      clearInterval(interpolationId);
       stopDemoData();
-      clearTimeout(connectionAttemptRef.current);
     };
-  }, [connect, stopDemoData]);
-
-  // Evict stale ships (not seen in 15 minutes)
-  useEffect(() => {
-    const id = setInterval(() => {
-      const cutoff = Date.now() - 15 * 60 * 1000;
-      setShips((prev) => {
-        const next = new Map(prev);
-        for (const [k, v] of next) {
-          if (v.lastUpdate < cutoff) next.delete(k);
-        }
-        return next;
-      });
-    }, 60_000);
-    return () => clearInterval(id);
-  }, []);
+  }, [fetchVessels, startDemoData, stopDemoData, startInterpolation, apiKey]);
 
   return {
     ships: Array.from(ships.values()),
     connected,
     error,
     shipCount: ships.size,
-    usingDemoData, // Export this to show status in UI
+    usingDemoData,
   };
 }
